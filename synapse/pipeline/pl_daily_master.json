@@ -1,0 +1,170 @@
+{
+	"name": "pl_daily_master",
+	"properties": {
+		"activities": [
+			{
+				"name": "ex_ingest_day",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "pl_ingest_day",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"p_year": {
+							"value": "@formatDateTime(pipeline().parameters.p_run_date, 'yyyy')",
+							"type": "Expression"
+						},
+						"p_month": {
+							"value": "@formatDateTime(pipeline().parameters.p_run_date, 'MM')",
+							"type": "Expression"
+						},
+						"p_day": {
+							"value": "@formatDateTime(pipeline().parameters.p_run_date, 'dd')",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "ex_ingest_next_day",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "ex_ingest_day",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "pl_ingest_day",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"p_year": {
+							"value": "@formatDateTime(addDays(pipeline().parameters.p_run_date, 1), 'yyyy')",
+							"type": "Expression"
+						},
+						"p_month": {
+							"value": "@formatDateTime(addDays(pipeline().parameters.p_run_date, 1), 'MM')",
+							"type": "Expression"
+						},
+						"p_day": {
+							"value": "@formatDateTime(addDays(pipeline().parameters.p_run_date, 1), 'dd')",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "nb_silver",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "ex_ingest_next_day",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "nb_silver_pageviews",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"run_date": {
+							"value": {
+								"value": "@pipeline().parameters.p_run_date",
+								"type": "Expression"
+							},
+							"type": "string"
+						},
+						"pipeline_run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "string"
+						}
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparksmall",
+						"type": "BigDataPoolReference"
+					}
+				}
+			},
+			{
+				"name": "nb_gold",
+				"type": "SynapseNotebook",
+				"dependsOn": [
+					{
+						"activity": "nb_silver",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebook": {
+						"referenceName": "nb_gold_pageviews",
+						"type": "NotebookReference"
+					},
+					"parameters": {
+						"run_date": {
+							"value": {
+								"value": "@pipeline().parameters.p_run_date",
+								"type": "Expression"
+							},
+							"type": "string"
+						}
+					},
+					"snapshot": true,
+					"sparkPool": {
+						"referenceName": "sparksmall",
+						"type": "BigDataPoolReference"
+					}
+				}
+			}
+		],
+		"parameters": {
+			"p_run_date": {
+				"type": "string",
+				"defaultValue": "2026-09-28"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-06T12:54:22Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}

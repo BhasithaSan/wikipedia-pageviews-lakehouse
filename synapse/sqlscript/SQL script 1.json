@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 1",
+	"properties": {
+		"content": {
+			"query": "SELECT TOP 10 rank, page_title, views, mobile_views\nFROM dbo.vw_top_pages_daily\nWHERE view_date = '2026-09-28'\nORDER BY rank;\n\nCREATE VIEW dbo.vw_ops_run_log AS\nSELECT * FROM OPENROWSET(\n    BULK 'ops_run_log/', DATA_SOURCE = 'ds_gold', FORMAT = 'DELTA') AS r;\nGO\n\nSELECT * FROM dbo.vw_ops_run_log ORDER BY logged_at DESC;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "wikilake_serving",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

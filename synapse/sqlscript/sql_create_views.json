@@ -1,0 +1,17 @@
+{
+	"name": "sql_create_views",
+	"properties": {
+		"content": {
+			"query": "CREATE VIEW dbo.vw_dim_date AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/dim_date/',\n    FORMAT = 'DELTA') AS r;\nGO\n\nCREATE VIEW dbo.vw_dim_wiki AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/dim_wiki/',\n    FORMAT = 'DELTA') AS r;\nGO\n\nCREATE VIEW dbo.vw_fact_pageviews_daily AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/fact_pageviews_daily/',\n    FORMAT = 'DELTA') AS r;\nGO\n\nCREATE VIEW dbo.vw_top_pages_daily AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/agg_top_pages_daily/',\n    FORMAT = 'DELTA') AS r;\nGO\n\nCREATE VIEW dbo.vw_access_daily AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/agg_access_daily/',\n    FORMAT = 'DELTA') AS r;\nGO\n\nCREATE VIEW dbo.vw_trending_daily AS\nSELECT * FROM OPENROWSET(\n    BULK 'https://stwikilakedev01.dfs.core.windows.net/gold/agg_trending_daily/',\n    FORMAT = 'DELTA') AS r;\nGO",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "wikilake_serving",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

@@ -1,0 +1,73 @@
+{
+	"name": "pl_ingest_day",
+	"properties": {
+		"activities": [
+			{
+				"name": "fe_hours",
+				"type": "ForEach",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@range(0, 24)",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "ex_ingest_hour",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "pl_ingest_hour",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"p_year": {
+										"value": "@pipeline().parameters.p_year",
+										"type": "Expression"
+									},
+									"p_month": {
+										"value": "@pipeline().parameters.p_month",
+										"type": "Expression"
+									},
+									"p_day": {
+										"value": "@pipeline().parameters.p_day",
+										"type": "Expression"
+									},
+									"p_hour": {
+										"value": "@if(less(item(), 10), concat('0', string(item())), string(item()))",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"p_year": {
+				"type": "string",
+				"defaultValue": "2026"
+			},
+			"p_month": {
+				"type": "string",
+				"defaultValue": "09"
+			},
+			"p_day": {
+				"type": "string",
+				"defaultValue": "29"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-03T10:06:18Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}

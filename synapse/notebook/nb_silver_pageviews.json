@@ -1,0 +1,316 @@
+{
+	"name": "nb_silver_pageviews",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparksmall",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "778a3461-318c-49f7-b3d3-d0c2b8df76a3"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/ad6a087c-bf6e-4482-a53d-e3bcb4085185/resourceGroups/rg-wikilake-dev/providers/Microsoft.Synapse/workspaces/wikilake/bigDataPools/sparksmall",
+				"name": "sparksmall",
+				"type": "Spark",
+				"endpoint": "https://wikilake.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparksmall",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"   run_date = \"2026-09-28\"\n",
+					"   pipeline_run_id = \"manual\""
+				],
+				"execution_count": 1
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"   storage = \"stwikilakedev01\"\n",
+					"\n",
+					"   bronze_path     = f\"abfss://bronze@{storage}.dfs.core.windows.net/pageviews\"\n",
+					"   silver_path     = f\"abfss://silver@{storage}.dfs.core.windows.net/pageviews\"\n",
+					"   quarantine_path = f\"abfss://quarantine@{storage}.dfs.core.windows.net/pageviews\"\n",
+					"\n",
+					"   print(bronze_path)"
+				],
+				"execution_count": 2
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from datetime import datetime, timedelta\n",
+					"\n",
+					"day = datetime.strptime(run_date, \"%Y-%m-%d\")\n",
+					"\n",
+					"# The time in a file name is the END of the hour.\n",
+					"# Hour 0 of this day ends at 01:00, ... hour 23 ends at 00:00 of the next day.\n",
+					"files = []\n",
+					"for h in range(1, 25):\n",
+					"    end = day + timedelta(hours=h)\n",
+					"    files.append(\n",
+					"        f\"{bronze_path}/year={end:%Y}/month={end:%m}/day={end:%d}/\"\n",
+					"        f\"pageviews-{end:%Y%m%d-%H}0000.gz\"\n",
+					"    )\n",
+					"\n",
+					"print(\"Number of files:\", len(files))\n",
+					"print(\"First:\", files[0])\n",
+					"print(\"Last: \", files[-1])"
+				],
+				"execution_count": 3
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"raw = (\n",
+					"    spark.read.text(files)\n",
+					"    .withColumn(\"source_file\", F.input_file_name())\n",
+					")\n",
+					"\n",
+					"raw.printSchema()\n",
+					"raw.show(5, truncate=False)"
+				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"parts = F.split(F.col(\"value\"), \" \")\n",
+					"\n",
+					"# File END time, e.g. \"20260928-19\" from ...pageviews-20260928-190000.gz\n",
+					"end_str = F.regexp_extract(\"source_file\", r\"pageviews-(\\d{8}-\\d{2})0000\\.gz\", 1)\n",
+					"end_ts = F.to_timestamp(end_str, \"yyyyMMdd-HH\")\n",
+					"\n",
+					"# The hour STARTS one hour before the file time\n",
+					"start_ts = (F.unix_timestamp(end_ts) - 3600).cast(\"timestamp\")\n",
+					"\n",
+					"parsed = raw.select(\n",
+					"    F.col(\"value\").alias(\"raw_line\"),\n",
+					"    F.size(parts).alias(\"n_fields\"),\n",
+					"    parts.getItem(0).alias(\"domain_code\"),\n",
+					"    parts.getItem(1).alias(\"page_title\"),\n",
+					"    parts.getItem(2).cast(\"long\").alias(\"views\"),\n",
+					"    F.to_date(start_ts).alias(\"view_date\"),\n",
+					"    F.hour(start_ts).alias(\"view_hour\"),\n",
+					"    \"source_file\",\n",
+					")\n",
+					"\n",
+					"parsed.drop(\"raw_line\", \"source_file\").show(5, truncate=False)"
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"scope = [\"en\", \"en.m\"]   \n",
+					"\n",
+					"english = (\n",
+					"    parsed\n",
+					"    .filter(F.col(\"domain_code\").isin(scope))\n",
+					"    .withColumn(\"language\", F.split(\"domain_code\", r\"\\.\").getItem(0))\n",
+					"    .withColumn(\n",
+					"        \"access\",\n",
+					"        F.when(F.col(\"domain_code\").endswith(\".m\"), \"mobile\").otherwise(\"desktop\"),\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"english.groupBy(\"domain_code\", \"language\", \"access\").count().show()"
+				],
+				"execution_count": 6
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"reason = (\n",
+					"    F.when(F.col(\"n_fields\") != 4, \"wrong number of fields\")\n",
+					"     .when(F.col(\"page_title\").isNull() | (F.col(\"page_title\") == \"\"), \"empty title\")\n",
+					"     .when(F.col(\"views\").isNull(), \"views not a number\")\n",
+					"     .when(F.col(\"views\") <= 0, \"views zero or less\")\n",
+					")\n",
+					"\n",
+					"checked = english.withColumn(\"reason\", reason)\n",
+					"\n",
+					"good = checked.filter(F.col(\"reason\").isNull()).drop(\"reason\", \"n_fields\", \"raw_line\")\n",
+					"bad  = checked.filter(F.col(\"reason\").isNotNull())\n",
+					"\n",
+					"checked.groupBy(\"reason\").count().show(truncate=False)"
+				],
+				"execution_count": 7
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"namespaces = [\n",
+					"    \"Special\", \"Talk\", \"User\", \"User_talk\", \"Wikipedia\", \"Wikipedia_talk\",\n",
+					"    \"File\", \"File_talk\", \"MediaWiki\", \"Template\", \"Template_talk\",\n",
+					"    \"Help\", \"Help_talk\", \"Category\", \"Category_talk\", \"Portal\",\n",
+					"    \"Draft\", \"Module\", \"TimedText\",\n",
+					"]\n",
+					"ns_pattern = r\"^(\" + \"|\".join(namespaces) + r\"):\"\n",
+					"\n",
+					"flagged = good.withColumn(\n",
+					"    \"is_article\",\n",
+					"    ~(\n",
+					"        F.col(\"page_title\").rlike(ns_pattern)\n",
+					"        | F.col(\"page_title\").isin(\"Main_Page\", \"-\")\n",
+					"    ),\n",
+					")\n",
+					"\n",
+					"(\n",
+					"    flagged.groupBy(\"page_title\", \"is_article\")\n",
+					"    .agg(F.sum(\"views\").alias(\"views\"))\n",
+					"    .orderBy(F.desc(\"views\"))\n",
+					"    .show(20, truncate=False)\n",
+					")"
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"silver_df = (\n",
+					"    flagged\n",
+					"    .select(\"view_date\", \"view_hour\", \"domain_code\", \"language\", \"access\",\n",
+					"            \"page_title\", \"views\", \"is_article\", \"source_file\")\n",
+					"    .withColumn(\"loaded_at\", F.current_timestamp())\n",
+					")\n",
+					"\n",
+					"(\n",
+					"    silver_df.write\n",
+					"    .format(\"delta\")\n",
+					"    .mode(\"overwrite\")\n",
+					"    .option(\"replaceWhere\", f\"view_date = '{run_date}'\")\n",
+					"    .partitionBy(\"view_date\")\n",
+					"    .save(silver_path)\n",
+					")\n",
+					"\n",
+					"quarantine_df = (\n",
+					"    bad\n",
+					"    .select(\"view_date\", \"view_hour\", \"source_file\", \"raw_line\", \"reason\")\n",
+					"    .withColumn(\"loaded_at\", F.current_timestamp())\n",
+					")\n",
+					"\n",
+					"(\n",
+					"    quarantine_df.write\n",
+					"    .format(\"delta\")\n",
+					"    .mode(\"overwrite\")\n",
+					"    .option(\"replaceWhere\", f\"view_date = '{run_date}'\")\n",
+					"    .partitionBy(\"view_date\")\n",
+					"    .save(quarantine_path)\n",
+					")\n",
+					"\n",
+					"print(\"Done\")"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# 1. From the raw files (one pass over all 24 files)\n",
+					"totals = parsed.agg(\n",
+					"    F.count(\"*\").alias(\"raw\"),\n",
+					"    F.sum(F.col(\"domain_code\").isin(scope).cast(\"int\")).alias(\"english\"),\n",
+					").first()\n",
+					"\n",
+					"# 2. From what was saved\n",
+					"silver_saved = spark.read.format(\"delta\").load(silver_path).filter(F.col(\"view_date\") == run_date)\n",
+					"quar_saved   = spark.read.format(\"delta\").load(quarantine_path).filter(F.col(\"view_date\") == run_date)\n",
+					"\n",
+					"n_silver = silver_saved.count()\n",
+					"n_quar   = quar_saved.count()\n",
+					"n_hours  = silver_saved.select(\"view_hour\").distinct().count()\n",
+					"\n",
+					"print(\"Raw rows:            \", totals[\"raw\"])\n",
+					"print(\"English rows:        \", totals[\"english\"])\n",
+					"print(\"Out of scope rows:   \", totals[\"raw\"] - totals[\"english\"])\n",
+					"print(\"Silver rows:         \", n_silver)\n",
+					"print(\"Quarantine rows:     \", n_quar)\n",
+					"print(\"Hours in silver:     \", n_hours)\n",
+					"print(\"English = silver + quarantine:\", totals[\"english\"] == n_silver + n_quar)"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"log_path = f\"abfss://gold@{storage}.dfs.core.windows.net/ops_run_log\"\n",
+					"\n",
+					"# 1. Run the checks, and collect any problems\n",
+					"english = totals[\"english\"]\n",
+					"quarantine_share = n_quar / english if english else 1.0\n",
+					"\n",
+					"problems = []\n",
+					"if english == 0:\n",
+					"    problems.append(\"no English rows\")\n",
+					"if n_hours != 24:\n",
+					"    problems.append(f\"only {n_hours} of 24 hours\")\n",
+					"if english != n_silver + n_quar:\n",
+					"    problems.append(\"row counts do not add up\")\n",
+					"if quarantine_share > 0.01:\n",
+					"    problems.append(f\"quarantine share is {quarantine_share:.2%}\")\n",
+					"\n",
+					"status = \"OK\" if not problems else \"FAILED: \" + \"; \".join(problems)\n",
+					"\n",
+					"# 2. Write the log row (also when checks fail, so the failure is recorded)\n",
+					"log_row = spark.createDataFrame(\n",
+					"    [(run_date, pipeline_run_id,\n",
+					"      int(totals[\"raw\"]), int(english),\n",
+					"      int(n_silver), int(n_quar), int(n_hours), status)],\n",
+					"    \"run_date string, pipeline_run_id string, raw_rows long, english_rows long, \"\n",
+					"    \"silver_rows long, quarantine_rows long, hours_found int, status string\",\n",
+					").withColumn(\"logged_at\", F.current_timestamp())\n",
+					"\n",
+					"log_row.write.format(\"delta\").mode(\"append\").save(log_path)\n",
+					"\n",
+					"# 3. Stop the notebook if any check failed\n",
+					"if problems:\n",
+					"    raise Exception(f\"Silver checks failed for {run_date}: {status}\")\n",
+					"\n",
+					"print(\"All silver checks passed\")"
+				],
+				"execution_count": 11
+			}
+		]
+	}
+}

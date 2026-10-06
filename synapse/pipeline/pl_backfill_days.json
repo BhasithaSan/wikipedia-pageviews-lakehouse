@@ -1,0 +1,57 @@
+{
+	"name": "pl_backfill_days",
+	"properties": {
+		"activities": [
+			{
+				"name": "fe_days",
+				"type": "ForEach",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@range(0, pipeline().parameters.p_days)",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "ex_daily_master",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "pl_daily_master",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"p_run_date": {
+										"value": "@formatDateTime(addDays(pipeline().parameters.p_start_date, item()), 'yyyy-MM-dd')",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"p_start_date": {
+				"type": "string",
+				"defaultValue": "2026-09-29"
+			},
+			"p_days": {
+				"type": "int",
+				"defaultValue": 7
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-06T12:55:40Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}

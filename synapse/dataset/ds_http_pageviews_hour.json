@@ -1,0 +1,35 @@
+{
+	"name": "ds_http_pageviews_hour",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_http_wikimedia",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_year": {
+				"type": "string"
+			},
+			"p_month": {
+				"type": "string"
+			},
+			"p_day": {
+				"type": "string"
+			},
+			"p_hour": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "HttpServerLocation",
+				"relativeUrl": {
+					"value": "@concat(dataset().p_year, '/', dataset().p_year, '-', dataset().p_month, '/pageviews-', dataset().p_year, dataset().p_month, dataset().p_day, '-', dataset().p_hour, '0000.gz')",
+					"type": "Expression"
+				}
+			}
+		}
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

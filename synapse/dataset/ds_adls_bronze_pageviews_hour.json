@@ -1,0 +1,40 @@
+{
+	"name": "ds_adls_bronze_pageviews_hour",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "wikilake-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_year": {
+				"type": "string"
+			},
+			"p_month": {
+				"type": "string"
+			},
+			"p_day": {
+				"type": "string"
+			},
+			"p_hour": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": {
+					"value": "@concat('pageviews-', dataset().p_year, dataset().p_month, dataset().p_day, '-', dataset().p_hour, '0000.gz')",
+					"type": "Expression"
+				},
+				"folderPath": {
+					"value": "@concat('pageviews/year=', dataset().p_year, '/month=', dataset().p_month, '/day=', dataset().p_day)",
+					"type": "Expression"
+				},
+				"fileSystem": "bronze"
+			}
+		}
+	},
+	"type": "Microsoft.Synapse/workspaces/datasets"
+}

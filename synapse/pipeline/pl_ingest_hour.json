@@ -1,0 +1,152 @@
+{
+	"name": "pl_ingest_hour",
+	"properties": {
+		"activities": [
+			{
+				"name": "gm_check_bronze",
+				"type": "GetMetadata",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "ds_adls_bronze_pageviews_hour",
+						"type": "DatasetReference",
+						"parameters": {
+							"p_year": "@pipeline().parameters.p_year",
+							"p_month": {
+								"value": "@pipeline().parameters.p_month",
+								"type": "Expression"
+							},
+							"p_day": {
+								"value": "@pipeline().parameters.p_day",
+								"type": "Expression"
+							},
+							"p_hour": {
+								"value": "@pipeline().parameters.p_hour",
+								"type": "Expression"
+							}
+						}
+					},
+					"fieldList": [
+						"exists"
+					],
+					"storeSettings": {
+						"type": "AzureBlobFSReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "BinaryReadSettings"
+					}
+				}
+			},
+			{
+				"name": "if_file_missing",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "gm_check_bronze",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@not(activity('gm_check_bronze').output.exists)",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "cp_http_to_bronze",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 60,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "BinarySource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET",
+										"additionalHeaders": "User-Agent: wikilake-portfolio/0.1 (bhasithag@gmail.com)",
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "BinaryReadSettings"
+									}
+								},
+								"sink": {
+									"type": "BinarySink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "ds_http_pageviews_hour",
+									"type": "DatasetReference",
+									"parameters": {
+										"p_year": "@pipeline().parameters.p_year",
+										"p_month": "@pipeline().parameters.p_month",
+										"p_day": "@pipeline().parameters.p_day",
+										"p_hour": "@pipeline().parameters.p_hour"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "ds_adls_bronze_pageviews_hour",
+									"type": "DatasetReference",
+									"parameters": {
+										"p_year": "@pipeline().parameters.p_year",
+										"p_month": "@pipeline().parameters.p_month",
+										"p_day": "@pipeline().parameters.p_day",
+										"p_hour": "@pipeline().parameters.p_hour"
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"p_year": {
+				"type": "string",
+				"defaultValue": "2026"
+			},
+			"p_month": {
+				"type": "string",
+				"defaultValue": "09"
+			},
+			"p_day": {
+				"type": "string",
+				"defaultValue": "28"
+			},
+			"p_hour": {
+				"type": "string",
+				"defaultValue": "16"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-03T08:54:27Z"
+	},
+	"type": "Microsoft.Synapse/workspaces/pipelines"
+}
